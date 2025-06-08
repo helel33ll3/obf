@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kick & Twitch Viewer Botu</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700;900&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Partikül Efekti -->
+    <div class="particle"></div>
+
+    <div class="container">
+        <h1>Kick & Twitch Viewer Botu(DENEME SURUMU)</h1>
+        
+        <div class="form-section">
+            <div class="input-group">
+                <div class="input-container">
+                    <label for="channelName">Kanal Adı</label>
+                    <input type="text" id="channelName" placeholder="Örnek: vSoure">
+                </div>
+                
+                <div class="input-container">
+                    <label for="iframeCount">izleyici Sayısı(max5)</label>
+                    <input type="number" id="iframeCount" min="1" max="5" value="1">
+                </div>
+
+                <div class="input-container">
+                    <label for="platform">Platform</label>
+                    <select id="platform">
+                        <option value="kick">Kick</option>
+                        <option value="twitch">Twitch (Kısa süreliğine Bakımda)</option>
+                    </select>
+                </div>
+                
+                <button class="btn btn-add" onclick="addChannel()">Kanal Ekle</button>
+            </div>
+        </div>
+
+        <div class="channel-list" id="channelList">
+            <h2>Kanal Listesi</h2>
+        </div>
+
+        <div id="iframeGroups"></div>
+
+        <div class="footer">
+        <span class="vcore-signature">vSource Kick Botu Deneme Sürümü(max5)</span>
+        <span class="made-by">made by vore.</span>
+        </div>
+    </div>
+
+    <div class="snow-container" id="snow"></div>
+
+    <script>
+        let channels = [];
+
+        function addChannel() {
+            const channelName = document.getElementById('channelName').value.trim();
+            let iframeCount = parseInt(document.getElementById('iframeCount').value);
+            const platform = document.getElementById('platform').value;
+
+            if (!channelName || iframeCount < 1) {
+                alert('Lütfen geçerli bilgiler girin!');
+                return;
+            }
+
+            // Maksimum 5 iframe kontrolü
+            iframeCount = Math.min(iframeCount, 5);
+
+            const channel = {
+                id: Date.now(),
+                name: channelName,
+                count: iframeCount,
+                platform: platform, 
+                status: 'offline',
+                active: false,
+                timeLeft: 600, // 10 dakika (60*10)
+                expanded: true
+            };
+
+            channels.push(channel);
+            updateChannelList();
+            document.getElementById('channelName').value = '';
+        }
+
+        function updateChannelList() {
+            const channelList = document.getElementById('channelList');
+            const channelsHTML = channels.map(channel => ` 
+                <div class="channel-item" id="channel-${channel.id}">
+                    <div class="channel-info">
+                        <span>${channel.name} (${channel.count} iframe) - ${channel.platform}</span>
+                        <span class="status-badge ${channel.status === 'online' ? 'status-online' : 'status-offline'}">
+                            ${channel.status}
+                        </span>
+                    </div>
+                    <div class="channel-actions">
+                        ${channel.active ? 
+                            `<button class="btn btn-stop" onclick="stopChannel(${channel.id})">Durdur</button>` :
+                            `<button class="btn btn-start" onclick="startChannel(${channel.id})">Başlat</button>`
+                        }
+                        <button class="btn btn-delete" onclick="deleteChannel(${channel.id})">Sil</button>
+                    </div>
+                    <div class="countdown">Kalan Süre: ${Math.floor(channel.timeLeft / 60)}:${(channel.timeLeft % 60).toString().padStart(2, '0')}</div>
+                </div>
+            `).join('');
+
+            channelList.innerHTML = `
+                <h2>Kanal Listesi ve İşlemler</h2>
+                ${channelsHTML}
+            `;
+        }
+
+        function startChannel(channelId) {
+            const channel = channels.find(c => c.id === channelId);
+            if (!channel) return;
+
+            channel.active = true;
+            channel.status = 'online';
+            updateChannelList();
+            createIframeGroup(channel);
+            startCountdown(channelId);
+        }
+
+        function startCountdown(channelId) {
+            const channel = channels.find(c => c.id === channelId);
+            if (!channel) return;
+
+            const countdownDisplay = document.querySelector(`#channel-${channelId} .countdown`);
+            const interval = setInterval(() => {
+                if (channel.timeLeft > 0) {
+                    channel.timeLeft -= 1;
+                    const minutes = Math.floor(channel.timeLeft / 60);
+                    const seconds = channel.timeLeft % 60;
+                    countdownDisplay.textContent = `Kalan Süre: ${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+                } else {
+                    clearInterval(interval);
+                    stopChannel(channelId);
+                }
+            }, 1000);
+        }
+
+        function stopChannel(channelId) {
+            const channel = channels.find(c => c.id === channelId);
+            if (!channel) return;
+
+            channel.active = false;
+            channel.status = 'offline';
+            updateChannelList();
+            removeIframeGroup(channelId);
+        }
+
+        function deleteChannel(channelId) {
+            channels = channels.filter(c => c.id !== channelId);
+            updateChannelList();
+            removeIframeGroup(channelId);
+        }
+
+        function createIframeGroup(channel) {
+            const iframeGroups = document.getElementById('iframeGroups');
+            const groupDiv = document.createElement('div');
+            groupDiv.id = `iframe-group-${channel.id}`;
+            groupDiv.className = 'iframe-group';
+            
+            let iframesHTML = '';
+            const iframeUrl = channel.platform === 'kick' 
+                ? `https://player.kick.com/${channel.name}` 
+                : `https://www.twitch.tv/${channel.name}`;
+
+            for (let i = 0; i < channel.count; i++) {
+                iframesHTML += `
+                    <iframe src="${iframeUrl}" 
+                            title="${channel.name} iframe ${i + 1}">
+                    </iframe>
+                `;
+            }
+
+            groupDiv.innerHTML = `
+                <h3>
+                    ${channel.name} Kanalı İframe'leri
+                    <div class="toggle-container">
+                        <button class="toggle-view" onclick="toggleIframeView(${channel.id})">
+                            ${channel.expanded ? 'Gizle' : 'Göster'}
+                        </button>
+                    </div>
+                </h3>
+                <div class="iframe-container" style="display: ${channel.expanded ? 'grid' : 'none'}">
+                    ${iframesHTML}
+                </div>
+            `;
+
+            iframeGroups.appendChild(groupDiv);
+        }
+
+        function removeIframeGroup(channelId) {
+            const group = document.getElementById(`iframe-group-${channelId}`);
+            if (group) {
+                group.remove();
+            }
+        }
+
+        function toggleIframeView(channelId) {
+            const channel = channels.find(c => c.id === channelId);
+            if (!channel) return;
+
+            channel.expanded = !channel.expanded;
+            const container = document.querySelector(`#iframe-group-${channelId} .iframe-container`);
+            if (container) {
+                container.style.display = channel.expanded ? 'grid' : 'none';
+            }
+        }
+
+        // Kar taneleri oluşturma
+        document.addEventListener('DOMContentLoaded', function() {
+            const snowContainer = document.getElementById('snow');
+            const snowCount = 7;
+            
+            for (let i = 0; i < snowCount; i++) {
+                const snow = document.createElement('div');
+                snow.className = 'snow';
+                
+                const size = Math.random() * 6 + 3;
+                snow.style.width = `${size}px`;
+                snow.style.height = `${size}px`;
+                
+                snow.style.left = `${Math.random() * 100}vw`;
+                snow.style.top = `${-10 - Math.random() * 20}px`;
+                
+                snow.style.opacity = Math.random() * 0.7 + 0.3;
+                
+                const duration = Math.random() * 10 + 5;
+                snow.style.animationDuration = `${duration}s`;
+                
+                snow.style.animationDelay = `${Math.random() * 5}s`;
+                
+                snowContainer.appendChild(snow);
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const cursor = document.createElement('div');
+            cursor.className = 'custom-cursor';
+            document.body.appendChild(cursor);
+            
+            let mouseX = 0, mouseY = 0;
+            let cursorX = 0, cursorY = 0;
+            const speed = 0.95;
+            
+            function animateCursor() {
+                cursorX += (mouseX - cursorX) * speed;
+                cursorY += (mouseY - cursorY) * speed;
+                
+                cursor.style.left = cursorX + 'px';
+                cursor.style.top = cursorY + 'px';
+                
+                requestAnimationFrame(animateCursor);
+            }
+            
+            document.addEventListener('mousemove', (e) => {
+                mouseX = e.clientX;
+                mouseY = e.clientY;
+            });
+            
+            document.addEventListener('mousedown', (e) => {
+                if (e.button === 0) cursor.classList.add('clicked');
+            });
+            
+            document.addEventListener('mouseup', () => {
+                cursor.classList.remove('clicked');
+            });
+            
+            animateCursor();
+        });
+    </script>
+</body>
+</html>
